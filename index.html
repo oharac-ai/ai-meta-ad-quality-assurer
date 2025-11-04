@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Meta Ad Quality Assurer</title>
+  <style>
+    :root{
+      --bg:#0b0c10;--card:#111318;--muted:#8a94a6;--text:#e8eefc;--brand:#6ee7ff;--good:#22c55e;--warn:#f59e0b;--bad:#ef4444;
+      --ring: rgba(110,231,255,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 800px at 80% -20%, #12223a 0%, transparent 60%),
+                 radial-gradient(1200px 800px at -10% 110%, #1a2636 0%, transparent 60%), var(--bg);
+         color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Helvetica Neue",Arial}
+    .wrapper{max-width:1100px;margin:40px auto;padding:0 20px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .brand-logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#3b82f6, #06b6d4);display:grid;place-items:center;box-shadow:0 10px 30px rgba(6,182,212,.35)}
+    .brand-logo svg{filter:drop-shadow(0 6px 10px rgba(0,0,0,.35))}
+    h1{font-size:clamp(22px,3.2vw,34px);margin:0}
+    .sub{color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns:1.2fr .9fr;gap:18px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr;}}
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+          border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px;box-shadow:0 10px 25px rgba(0,0,0,.25)}
+    .card h2{margin:2px 0 10px;font-size:18px}
+    label{display:block;margin:.5rem 0 .35rem;color:#c7d2fe}
+    input[type="text"], textarea, select{width:100%;background:#0d1016;border:1px solid rgba(255,255,255,.1);color:var(--text);
+       border-radius:12px;padding:12px 14px;outline:none}
+    textarea{min-height:120px;resize:vertical}
+    input:focus, textarea:focus, select:focus{border-color:var(--brand); box-shadow:0 0 0 4px var(--ring)}
+
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{display:inline-flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.15);
+         background:linear-gradient(180deg,#172035,#0e1626);color:var(--text);cursor:pointer;font-weight:600}
+    .btn:hover{transform:translateY(-1px)}
+    .btn.primary{background:linear-gradient(180deg,#0ea5e9,#0369a1);border-color:#0ea5e9}
+
+    .muted{color:var(--muted);font-size:13px}
+    .score-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.18);
+                 background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02))}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);font-size:12px;color:#cbd5e1}
+
+    .meter{height:10px;background:#0f172a;border-radius:99px;overflow:hidden;border:1px solid rgba(255,255,255,.12)}
+    .meter > span{display:block;height:100%;width:0%;transition:width .45s ease;border-radius:99px}
+
+    .good{background:linear-gradient(90deg,#10b981,#22c55e)}
+    .warn{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+    .bad{background:linear-gradient(90deg,#ef4444,#fb7185)}
+
+    ul.clean{margin:.4rem 0 .8rem;padding-left:18px}
+    .result-block{margin-top:12px}
+    .code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px;color:#9ca3af}
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <header>
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#e2f3ff" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2l2.09 6.26H20.5l-5.17 3.76L17.41 18 12 13.96 6.59 18l2.08-5.98L3.5 8.26h6.41L12 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h1>AI Meta Ad Quality Assurer</h1>
+          <p class="sub">Paste a Meta Ads Library link or your ad text. Get a 10-point score, reasons, and tailored improvement ideas.</p>
+        </div>
+      </div>
+      <div class="score-badge" id="scoreBadge" title="Score updates after analysis">
+        <strong>Score</strong>
+        <span id="scoreNow" class="pill">–/10</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Left: Input -->
+      <section class="card">
+        <h2>1) Input</h2>
+        <label for="clientName">Client Name (optional)</label>
+        <input id="clientName" type="text" placeholder="e.g., BrightSmiles Dental" />
+        <label for="adUrl">Meta Ads Library URL (optional)</label>
+        <input id="adUrl" type="text" placeholder="https://www.facebook.com/ads/library/?id=123456…" />
+        <p class="muted">Tip: We don't fetch content directly from the URL (CORS). Paste the creative copy below for the best analysis. URL is used to capture the Ad ID and context.</p>
+
+        <div class="row">
+          <div>
+            <label for="objective">Campaign Objective</label>
+            <select id="objective">
+              <option value="leads">Leads</option>
+              <option value="traffic">Traffic</option>
+              <option value="sales">Sales</option>
+              <option value="awareness">Awareness</option>
+              <option value="engagement">Engagement</option>
+            </select>
+          </div>
+          <div>
+            <label for="audience">Target Audience (short)</label>
+            <input id="audience" type="text" placeholder="e.g., Parents in Dublin, 30–45" />
+          </div>
+        </div>
+
+        <label for="primary">Primary Text</label>
+        <textarea id="primary" placeholder="Your ad's main text…"></textarea>
+
+        <div class="row">
+          <div>
+            <label for="headline">Headline</label>
+            <input id="headline" type="text" placeholder="Headline shown under the creative" />
+          </div>
+          <div>
+            <label for="description">Description (optional)</label>
+            <input id="description" type="text" placeholder="Additional line under headline" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="cta">Call-To-Action Button</label>
+            <select id="cta">
+              <option value="none">None</option>
+              <option>Learn More</option>
+              <option>Sign Up</option>
+              <option>Book Now</option>
+              <option>Shop Now</option>
+              <option>Get Offer</option>
+              <option>Download</option>
+              <option>Contact Us</option>
+            </select>
+          </div>
+          <div>
+            <label for="industry">Industry</label>
+            <input id="industry" type="text" placeholder="e.g., Dental, Fitness, SaaS" />
+          </div>
+        </div>
+
+        <label for="creativeFiles">Ad Screenshot(s) – static only</label>
+        <input id="creativeFiles" type="file" accept="image/*" multiple />
+        <p class="muted">Tip: Drag in 1–3 static image screenshots of the ad. We'll estimate text density and visual clarity.</p>
+
+        <div style="display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap">
+          <button class="btn primary" id="analyzeBtn">Analyze Ad</button>
+          <button class="btn" id="sampleBtn" type="button">Fill with Sample</button>
+          <button class="btn" id="copyBtn" type="button">Copy Summary</button>
+          <button class="btn" id="downloadBtn" type="button">Download Report</button>
+          <span class="muted">No data leaves your browser. 100% client-side.</span>
+        </div>
+      </section>
+
+      <!-- Right: Output -->
+      <section class="card">
+        <h2>2) Results</h2>
+        <div class="result-block">
+          <div class="meter" aria-label="Score meter"><span id="meterFill" class="bad" style="width:0%"></span></div>
+          <p class="muted code" id="adMeta">Client: – • Ad ID: – • Objective: – • Audience: –</p>
+        </div>
+
+        <div class="result-block">
+          <h3 style="margin:8px 0 6px">Why this score</h3>
+          <ul id="reasons" class="clean"></ul>
+        </div>
+
+        <div class="result-block">
+          <h3 style="margin:8px 0 6px">Suggestions to improve</h3>
+          <ul id="suggestions" class="clean"></ul>
+        </div>
+
+        <div class="result-block">
+          <h3 style="margin:8px 0 6px">Policy & quality flags</h3>
+          <ul id="flags" class="clean"></ul>
+        </div>
+
+        <div class="result-block">
+          <h3 style="margin:8px 0 6px">Ad Library content</h3>
+          <div id="adlibContent" class="muted code">No preview fetched yet. Paste a link and Analyze to attempt a preview (requires proxy for Facebook URLs).</div>
+        </div>
+
+        <div class="result-block">
+          <h3 style="margin:8px 0 6px">Creative preview</h3>
+          <div id="creativePreview" class="code" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:18px">
+      <h2>Scoring rubric (transparent)</h2>
+      <p class="muted">The score (0–10) is a weighted blend of hook strength, specificity, readability, CTA clarity, benefit focus, social proof, compliance risk, and spamminess. Edit the copy above and re-run to see how changes shift your score.</p>
+      <pre class="code" id="rubricText"></pre>
+    </section>
+
+    <footer style="margin:22px 0 10px" class="muted">
+      Built as a client-side prototype. For live Ads Library fetching, connect a server/API and map payload → fields above.
+    </footer>
+  </div>
+
+<script>
+  const PROXY_URL = '';// Optional: set to your proxy endpoint to fetch Ads Library pages.
+  // --- Helpers -------------------------------------------------------------
+  const $ = (id)=>document.getElementById(id);
+  const words = (t)=> (t||'').trim().split(/\s+/).filter(Boolean);
+  const count = (re, t)=>((t||'').match(re)||[]).length;
+  const pct = (n)=> Math.max(0, Math.min(100, n));
+
+  function parseMetaUrl(url){
+    try{
+      if(!url) return {id:null};
+      const u = new URL(url);
+      const id = u.searchParams.get('id') || (u.pathname.includes('/ads/library')? u.searchParams.get('ad_id'): null);
+      return {id};
+    }catch{ return {id:null}; }
+  }
+
+  // --- Heuristics ----------------------------------------------------------
+  const LEX = {
+    hooks:["new","finally","limited","struggling","stop","how to","discover","secret","you deserve","tired of","unlock","don’t miss","ready"],
+    cta:["learn more","sign up","book now","shop now","get offer","download","contact us","start now","try free","apply now"],
+    benefits:["save","boost","grow","faster","easier","increase","improve","reduce","safer","simpler","affordable","secure"],
+    social:["5★","4.8/5","trusted","over","since","reviews","case study","backed","award","certified","clinically"],
+    risky:["before and after","cure","guaranteed","miracle","instant results","click here","you are","your body","race","religion","ethnicity","disability"],
+  };
+
+  function scoreAd({primary, headline, description, cta, objective}){
+    const text = [primary, headline, description].filter(Boolean).join(" \\n ");
+    const firstSentence = (primary||'').split(/[.!?\\n]/)[0];
+
+    const hookSignal = /(\\?|\\b\\d+%?|save|stop|how to|discover|ready|tired of)/i.test(firstSentence) ||
+                       LEX.hooks.some(h=>firstSentence.toLowerCase().includes(h));
+
+    const hasNumbers = /(\\b\\d+[\\d,.]*\\b|\\b\\d+%)/.test(text);
+
+    const ctaText = (cta||'').toLowerCase();
+    const hasCTA = ctaText !== 'none' && (LEX.cta.includes(ctaText) || LEX.cta.some(c=>text.toLowerCase().includes(c)));
+
+    const benefitHits = LEX.benefits.reduce((acc,b)=> acc + count(new RegExp(`\\\\b${b}\\\\b`,`i`), text), 0);
+
+    const socialHits = LEX.social.reduce((acc,b)=> acc + count(new RegExp(b.replace(/[-/]/g,'\\\\$&'), 'i'), text), 0);
+
+    const sentences = (primary||'').split(/[.!?\\n]+/).filter(s=>s.trim().length>0);
+    const avgLen = sentences.length? words(primary).length / sentences.length : words(primary).length;
+    let readabilityScore = 1;
+    if(avgLen <= 18) readabilityScore = 1;
+    else if(avgLen <= 24) readabilityScore = 0.8;
+    else if(avgLen <= 32) readabilityScore = 0.6;
+    else readabilityScore = 0.35;
+
+    const exclam = count(/!/g, text);
+    const allCaps = ((text.match(/\\b[A-Z]{5,}\\b/g)||[]).length);
+    const emoji = count(/[\\p{Emoji_Presentation}\\p{Extended_Pictographic}]/gu, text);
+    const spamPenalty = Math.min(1, (exclam>2? .15*(exclam-2):0) + (allCaps>1? .1*(allCaps-1):0) + (emoji>6? .05*(emoji-6):0));
+
+    const riskHits = LEX.risky.reduce((acc,b)=> acc + count(new RegExp(b.replace(/[-/]/g,'\\\\$&'), 'i'), text), 0);
+    const riskPenalty = Math.min(1, riskHits * 0.2);
+
+    const needsCTA = ['leads','sales','traffic','engagement'].includes((objective||'').toLowerCase());
+    const objPenalty = needsCTA && !hasCTA ? 0.2 : 0;
+
+    const w = {
+      hook:.18, specificity:.10, cta:.16, benefits:.16, social:.12, readability:.14, spam:.07, risk:.07
+    };
+
+    const hookScore = hookSignal ? 1 : 0.5;
+    const specScore = hasNumbers ? 1 : 0.55;
+    const ctaScore = hasCTA ? 1 : 0.55;
+    const benefitScore = Math.min(1, 0.5 + 0.15*benefitHits);
+    const socialScore = Math.min(1, 0.5 + 0.25*socialHits);
+    const spamScore = 1 - spamPenalty;
+    const riskScore = 1 - riskPenalty;
+
+    let composite = (
+      hookScore*w.hook +
+      specScore*w.specificity +
+      ctaScore*w.cta +
+      benefitScore*w.benefits +
+      socialScore*w.social +
+      readabilityScore*w.readability +
+      spamScore*w.spam +
+      riskScore*w.risk
+    );
+
+    composite = Math.max(0, composite - objPenalty);
+
+    try {
+      const cp = creativePenalties();
+      if(cp.penalty){ composite = Math.max(0, composite - cp.penalty); }
+    } catch(_) {}
+
+    const score10 = Math.round(composite * 10 * 10) / 10;
+
+    const reasons = [];
+    if(hookSignal) reasons.push("Strong opening hook detected.");
+    if(hasNumbers) reasons.push("Uses specific numbers/percentages (adds credibility).");
+    if(hasCTA) reasons.push("Clear, action-oriented CTA present.");
+    if(benefitHits>=2) reasons.push("Benefits-oriented copy appears repeatedly.");
+    if(socialHits>=1) reasons.push("Includes social proof / trust markers.");
+
+    const negatives = [];
+    if(!hookSignal) negatives.push("Opening line lacks a clear hook.");
+    if(!hasNumbers) negatives.push("No concrete numbers or proof points.");
+    if(!hasCTA) negatives.push("CTA unclear or missing.");
+    if(readabilityScore<.7) negatives.push("Long sentences reduce readability.");
+    if(spamPenalty>.25) negatives.push("Potentially spammy formatting (excess caps/emoji/!!!).");
+    if(riskPenalty>.15) negatives.push("Contains high-risk terms for Meta policy.");
+    try{
+      const cp = creativePenalties();
+      if(cp.note) negatives.push(cp.note);
+    }catch(_){}
+
+    const suggestions = [];
+    if(!hookSignal) suggestions.push("Open with a pain-point + benefit (e.g., ‘Tired of X? Get Y in Z days’).");
+    if(!hasNumbers) suggestions.push("Add a proof point: metric, %, time-to-value, or count of customers.");
+    if(!hasCTA) suggestions.push("Match CTA to objective (e.g., ‘Book Now’ for consults, ‘Learn More’ for top-funnel).");
+    if(readabilityScore<.7) suggestions.push("Break long sentences. Aim for 12–18 words per sentence.");
+    if(spamPenalty>.25) suggestions.push("Reduce exclamation/caps/emoji to improve quality and delivery.");
+    if(riskPenalty>.15) suggestions.push("Remove risky phrases like ‘guaranteed’, ‘cure’, or demographic targeting in copy.");
+    suggestions.push("Test 2 hooks: Pain→Relief + Outcome→Time with kinetic first 1s.");
+    suggestions.push("Add mini proof tile under headline: testimonial + locality + rating.");
+
+    return {
+      score: Math.max(0, Math.min(10, score10)),
+      reasons: reasons.slice(0,3).concat(negatives.slice(0, 3 - Math.min(3,reasons.length))),
+      suggestions: Array.from(new Set(suggestions)).slice(0,3),
+      flags: {
+        spam: spamPenalty>0.25,
+        risky: riskPenalty>0.15,
+        longSentences: readabilityScore<.7,
+        missingCTA: !hasCTA && needsCTA
+      }
+    };
+  }
+
+  // --- Image analysis (static) --------------------------------------------
+  const imageState = { files: [], metrics: [] };
+
+  function renderCreativePreviews(){
+    const wrap = $('creativePreview');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    imageState.files.forEach((file, idx)=>{
+      const url = URL.createObjectURL(file);
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.padding = '6px';
+      const img = document.createElement('img');
+      img.src = url; img.alt = file.name; img.style.width='100%'; img.style.borderRadius='10px';
+      const cap = document.createElement('div');
+      cap.className='muted';
+      const m = imageState.metrics[idx];
+      cap.textContent = m ? `Edge density: ${(m.edgeDensity*100).toFixed(1)}%` : 'Analyzing…';
+      card.appendChild(img); card.appendChild(cap);
+      wrap.appendChild(card);
+    });
+  }
+
+  function sobelEdgeDensity(img){
+    const c = document.createElement('canvas');
+    const maxW = 640; const scale = Math.min(1, maxW / img.width);
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const {data, width, height} = ctx.getImageData(0,0,c.width,c.height);
+    const gx = [-1,0,1,-2,0,2,-1,0,1];
+    const gy = [-1,-2,-1,0,0,0,1,2,1];
+    let edges = 0; const thr = 130;
+    for(let y=1;y<height-1;y++){
+      for(let x=1;x<width-1;x++){
+        let sx=0, sy=0, i=0;
+        for(let ky=-1; ky<=1; ky++){
+          for(let kx=-1; kx<=1; kx++){
+            const px = ((y+ky)*width + (x+kx))*4;
+            const r=data[px], g=data[px+1], b=data[px+2];
+            const gray = (r*0.299+g*0.587+b*0.114);
+            sx += gray * gx[i]; sy += gray * gy[i]; i++;
+          }\n        }\n        const mag = Math.sqrt(sx*sx + sy*sy);\n        if(mag>thr) edges++;\n      }\n    }\n    const total = (width-2)*(height-2);\n    return { edgeDensity: edges/total };\n  }\n\n  function analyzeSelectedImages(){\n    imageState.metrics = [];\n    const files = imageState.files;\n    if(!files.length){ renderCreativePreviews(); return; }\n    let processed = 0;\n    files.forEach((file, idx)=>{\n      const img = new Image();\n      img.onload = ()=>{\n        const m = sobelEdgeDensity(img);\n        imageState.metrics[idx] = m;\n        processed++;\n        if(processed===files.length) renderCreativePreviews();\n      };\n      img.src = URL.createObjectURL(file);\n    });\n  }\n\n  const fileInput = document.getElementById('creativeFiles');\n  if(fileInput){\n    fileInput.addEventListener('change', (e)=>{\n      imageState.files = Array.from(e.target.files||[]);\n      renderCreativePreviews();\n      analyzeSelectedImages();\n    });\n  }\n\n  function creativePenalties(){\n    if(!imageState.metrics.length) return { penalty: 0, note: null };\n    const avg = imageState.metrics.reduce((a,b)=>a+b.edgeDensity,0)/imageState.metrics.length;\n    if(avg>0.12) return { penalty: 0.2, note: 'High text/edge density in creative may hurt delivery (20% penalty applied).' };\n    if(avg>0.08) return { penalty: 0.1, note: 'Moderate text/edge density in creative (10% penalty).' };\n    return { penalty: 0, note: null };\n  }\n\n  function tryFetchAdPreview(url){\n    const box = $('adlibContent');\n    if(box) box.textContent = 'URL-only analysis requires a small proxy (set PROXY_URL). For now, paste the ad copy above.';\n  }\n\n  // --- UI wire-up ----------------------------------------------------------\n  const rubricPretty = `Weights → Hook 0.18, Specificity 0.10, CTA 0.16, Benefits 0.16, Social Proof 0.12, Readability 0.14, Low Spam 0.07, Low Risk 0.07.\\nPenalties → Missing CTA for perf objectives (−0.2), spam/risk scaled to frequency.`;\n  $('rubricText').textContent = rubricPretty;\n\n  $('sampleBtn').addEventListener('click', ()=>{\n    $('adUrl').value = 'https://www.facebook.com/ads/library/?id=9876543210';\n    $('objective').value = 'leads';\n    $('audience').value = 'Adults in Dublin considering dental implants';\n    $('primary').value = 'Missing teeth? Regain your smile with our free implant consultation — see if you qualify in 60 seconds. Over 1,200 Dublin patients treated since 2010. 4.9/5 reviews. Limited October slots.';\n    $('headline').value = 'Free Implant Assessment';\n    $('description').value = 'Book today. Flexible plans available';\n    $('cta').value = 'Book Now';\n  });\n\n  let lastPayload = null, lastResults = null;\n\n  $('analyzeBtn').addEventListener('click', ()=>{\n    const payload = {\n      url: $('adUrl').value.trim(),\n      clientName: $('clientName').value.trim(),\n      objective: $('objective').value,\n      audience: $('audience').value,\n      primary: $('primary').value.trim(),\n      headline: $('headline').value.trim(),\n      description: $('description').value.trim(),\n      cta: $('cta').value\n    };\n\n    const adId = parseMetaUrl(payload.url).id;\n    const {score, reasons, suggestions, flags} = scoreAd(payload);\n\n    lastPayload = payload;\n    lastResults = { score, reasons, suggestions, flags };\n\n    const pctWidth = pct(score*10);\n    const meter = $('meterFill');\n    meter.style.width = pctWidth + '%';\n    meter.className = (score>=8? 'good' : score>=6 ? 'warn' : 'bad');\n\n    $('scoreNow').textContent = `${score.toFixed(1)}/10`;\n\n    $('adMeta').textContent = `Client: ${payload.clientName || '–'} • Ad ID: ${adId || '–'} • Objective: ${payload.objective || '–'} • Audience: ${payload.audience || '–'}`;\n\n    const mount = (el, items)=>{ el.innerHTML=''; items.forEach(t=>{ const li=document.createElement('li'); li.textContent=t; el.appendChild(li); }); };\n    mount($('reasons'), reasons.length? reasons: ['No strong signals detected — add a hook, proof point, and clear CTA.']);\n    mount($('suggestions'), suggestions.length? suggestions: ['Tighten copy and add a benefit-led headline.']);\n\n    const fl = [];\n    if(flags.spam) fl.push('Formatting looks spammy (caps/emoji/!!!).');\n    if(flags.risky) fl.push('Potential Meta policy risk detected.');\n    if(flags.longSentences) fl.push('Sentences are long; readability may suffer.');\n    if(flags.missingCTA) fl.push('No CTA for a performance objective.');\n    mount($('flags'), fl.length? fl: ['No major flags.']);\n\n    if(payload.url){\n      tryFetchAdPreview(payload.url);\n    }\n  });\n\n  function buildReport(payload, results){\n    const lines = [];\n    lines.push('AI Meta Ad Quality Assurer – Report');\n    lines.push(`Score: ${results.score.toFixed(1)}/10`);\n    const id = (function(u){ try{ return new URL(u).searchParams.get('id') || '–'; }catch{ return '–'; } })(payload.url);\n    lines.push(`Client: ${payload.clientName || '–'}`);\n    lines.push(`Ad ID: ${id}`);\n    lines.push(`Objective: ${payload.objective || '–'}`);\n    lines.push(`Audience: ${payload.audience || '–'}`);\n    lines.push('');\n    lines.push('Reasons:');\n    (results.reasons||[]).forEach((r,i)=>lines.push(`${i+1}. ${r}`));\n    lines.push('');\n    lines.push('Suggestions:');\n    (results.suggestions||[]).forEach((s,i)=>lines.push(`${i+1}. ${s}`));\n    lines.push('');\n    lines.push('Flags:');\n    const fl = [];\n    if(results.flags?.spam) fl.push('Formatting looks spammy (caps/emoji/!!!).');\n    if(results.flags?.risky) fl.push('Potential Meta policy risk detected.');\n    if(results.flags?.longSentences) fl.push('Sentences are long; readability may suffer.');\n    if(results.flags?.missingCTA) fl.push('No CTA for a performance objective.');\n    if(!fl.length) fl.push('No major flags.');\n    fl.forEach((f,i)=>lines.push(`${i+1}. ${f}`));\n    lines.push('');\n    lines.push('Copy:');\n    lines.push(`Primary: ${payload.primary || ''}`);\n    lines.push(`Headline: ${payload.headline || ''}`);\n    lines.push(`Description: ${payload.description || ''}`);\n    return lines.join('\\n');\n  }\n\n  function download(text, filename){\n    const blob = new Blob([text], {type:'text/plain'});\n    const url = URL.createObjectURL(blob);\n    const a = document.createElement('a');\n    a.href = url; a.download = filename; a.click();\n    setTimeout(()=>URL.revokeObjectURL(url), 5000);\n  }\n\n  $('copyBtn')?.addEventListener('click', async ()=>{\n    if(!lastResults){ alert('Run an analysis first.'); return; }\n    const report = buildReport(lastPayload, lastResults);\n    try{ await navigator.clipboard.writeText(report); alert('Summary copied to clipboard.'); }\n    catch{ alert('Could not copy automatically. Your browser may block clipboard access.'); }\n  });\n\n  $('downloadBtn')?.addEventListener('click', ()=>{\n    if(!lastResults){ alert('Run an analysis first.'); return; }\n    const report = buildReport(lastPayload, lastResults);\n    const safeId = (parseMetaUrl(lastPayload.url).id || 'report').toString();\n    download(report, `ad-quality-${safeId}.txt`);\n  });\n</script>\n</body>\n</html>\n
